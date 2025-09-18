@@ -4,8 +4,19 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import ScheduleCard from "./ScheduleCard";
 
+// Define the shape of a schedule
+interface Schedule {
+  id: string;
+  user_id: string;
+  title: string;
+  start_time: string; // ISO string
+  end_time: string;   // ISO string
+  description?: string | null;
+  reminder_sent: boolean;
+}
+
 export default function ScheduleList() {
-  const [schedules, setSchedules] = useState<any[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,7 +35,7 @@ export default function ScheduleList() {
       )
       .subscribe();
 
-    // Cleanup
+    // Cleanup subscription on unmount
     return () => {
       supabase.removeChannel(channel);
     };
@@ -32,9 +43,7 @@ export default function ScheduleList() {
 
   async function fetchSchedules() {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
         setSchedules([]);
@@ -47,26 +56,38 @@ export default function ScheduleList() {
         .eq("user_id", user.id)
         .order("start_time", { ascending: true });
 
+
       if (error) throw error;
 
       setSchedules(data || []);
-    } catch (error: any) {
-      console.error("Error fetching schedules:", error.message);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error("Error fetching schedules:", error.message);
+      } else {
+        console.error("Unexpected error fetching schedules:", error);
+      }
     } finally {
       setLoading(false);
     }
   }
 
-  async function deleteSchedule(id: string | number) {
+  async function deleteSchedule(id: string) {
     try {
       const { error } = await supabase
         .from("quiet_hours")
         .delete()
-        .eq("id", String(id)); // convert to string
+        .eq("id", id);
+
       if (error) throw error;
+
+      // Remove deleted schedule from state
       setSchedules((prev) => prev.filter((s) => s.id !== id));
-    } catch (error: any) {
-      console.error("Error deleting schedule:", error.message);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error("Error deleting schedule:", error.message);
+      } else {
+        console.error("Unexpected error deleting schedule:", error);
+      }
     }
   }
 
@@ -85,8 +106,11 @@ export default function ScheduleList() {
         schedules.map((schedule) => (
           <ScheduleCard
             key={schedule.id}
-            schedule={schedule}
-            onDelete={deleteSchedule}
+            schedule={{
+              ...schedule,
+              description: schedule.description ?? undefined,
+            }}
+            onDelete={(id) => deleteSchedule(String(id))}
             isUpcoming={new Date(schedule.start_time) > new Date()}
           />
         ))
