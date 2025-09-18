@@ -3,6 +3,7 @@
 A Next.js app with Supabase backend for scheduling quiet study/focus time blocks with email reminders.
 
 ## Features
+
 - User authentication with Supabase Auth
 - Create/view/delete quiet hour schedules
 - Automatic email reminders 10 minutes before each session
@@ -10,6 +11,7 @@ A Next.js app with Supabase backend for scheduling quiet study/focus time blocks
 - Real-time updates
 
 ## Environment Variables
+
 ```
 NEXT_PUBLIC_SUPABASE_URL=your_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key

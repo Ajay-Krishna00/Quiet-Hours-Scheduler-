@@ -1,94 +1,96 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabase";
+import ScheduleCard from "./ScheduleCard";
 
 export default function ScheduleList() {
-  const [schedules, setSchedules] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchSchedules()
-    
-    // Subscribe to changes
-    const subscription = supabase
-      .channel('quiet_hours_changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'quiet_hours' },
-        () => fetchSchedules()
-      )
-      .subscribe()
+    fetchSchedules();
 
-    return () => subscription.unsubscribe()
-  }, [])
+    // Subscribe to changes (INSERT, UPDATE, DELETE)
+    const channel = supabase
+      .channel("quiet_hours_changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "quiet_hours" },
+        (payload) => {
+          console.log("Realtime change:", payload);
+          fetchSchedules(); // Refresh list on any DB change
+        },
+      )
+      .subscribe();
+
+    // Cleanup
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   async function fetchSchedules() {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setSchedules([]);
+        return;
+      }
 
       const { data, error } = await supabase
-        .from('quiet_hours')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('start_time', { ascending: true })
+        .from("quiet_hours")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("start_time", { ascending: true });
 
-      if (error) throw error
-      setSchedules(data || [])
+      if (error) throw error;
+
+      setSchedules(data || []);
     } catch (error: any) {
-      console.error('Error fetching schedules:', error.message)
+      console.error("Error fetching schedules:", error.message);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
-  async function deleteSchedule(id: string) {
+  async function deleteSchedule(id: string | number) {
     try {
       const { error } = await supabase
-        .from('quiet_hours')
+        .from("quiet_hours")
         .delete()
-        .eq('id', id)
-
-      if (error) throw error
+        .eq("id", String(id)); // convert to string
+      if (error) throw error;
+      setSchedules((prev) => prev.filter((s) => s.id !== id));
     } catch (error: any) {
-      console.error('Error deleting schedule:', error.message)
+      console.error("Error deleting schedule:", error.message);
     }
   }
 
-  if (loading) return <div>Loading schedules...</div>
+  if (loading) return <div>Loading schedules...</div>;
 
   return (
-    <div>
-      <h3>Your Quiet Hours ({schedules.length})</h3>
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold mb-2">
+        Your Quiet Hours ({schedules.length})
+      </h3>
       {schedules.length === 0 ? (
-        <p>No quiet hours scheduled yet. Create your first one above!</p>
+        <p className="text-gray-600">
+          No quiet hours scheduled yet. Create your first one above!
+        </p>
       ) : (
-        schedules.map((schedule: any) => (
-          <div key={schedule.id} className="schedule-item">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <h4 style={{ margin: '0 0 10px 0' }}>{schedule.title}</h4>
-                <p style={{ margin: '5px 0' }}>
-                  <strong>Start:</strong> {new Date(schedule.start_time).toLocaleString()}
-                </p>
-                <p style={{ margin: '5px 0' }}>
-                  <strong>End:</strong> {new Date(schedule.end_time).toLocaleString()}
-                </p>
-                {schedule.description && (
-                  <p style={{ margin: '10px 0 0 0', fontStyle: 'italic' }}>{schedule.description}</p>
-                )}
-              </div>
-              <button 
-                className="secondary" 
-                onClick={() => deleteSchedule(schedule.id)}
-                style={{ marginLeft: '15px' }}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
+        schedules.map((schedule) => (
+          <ScheduleCard
+            key={schedule.id}
+            schedule={schedule}
+            onDelete={deleteSchedule}
+            isUpcoming={new Date(schedule.start_time) > new Date()}
+          />
         ))
       )}
     </div>
-  )
+  );
 }
